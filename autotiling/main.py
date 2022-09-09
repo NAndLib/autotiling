@@ -19,7 +19,7 @@ import os
 import sys
 from functools import partial
 
-from i3ipc import Connection, Event
+from i3ipc import Connection, Event, WindowEvent
 
 try:
     from .__about__ import __version__
@@ -47,7 +47,13 @@ def save_string(string, file):
         print(e)
 
 
-def switch_splitting(i3, e, debug, workspaces):
+def switch_splitting(i3, e, debug, workspaces, excluded_window_changes):
+    if type(e) == WindowEvent:
+        if e.change in excluded_window_changes:
+            if debug:
+                print(f"Debug: window '{e.change}' event not allowed,"
+                      " keeping current setting")
+            return
     try:
         con = i3.get_tree().find_focused()
         if con and not workspaces or (str(con.workspace().num) in workspaces):
@@ -111,6 +117,12 @@ def main():
                         nargs="*",
                         type=str,
                         default=["WINDOW", "MODE"])
+    parser.add_argument("-E",
+                        "--exclude-change",
+                        help="exclude autotiling for the following WINDOW events",
+                        nargs="+",
+                        type=str,
+                        default=[])
 
     args = parser.parse_args()
 
@@ -125,7 +137,8 @@ def main():
         print("No events specified", file=sys.stderr)
         sys.exit(1)
 
-    handler = partial(switch_splitting, debug=args.debug, workspaces=args.workspaces)
+    handler = partial(switch_splitting, debug=args.debug, workspaces=args.workspaces,
+                      excluded_window_changes=args.exclude_change)
     i3 = Connection()
     for e in args.events:
         try:
